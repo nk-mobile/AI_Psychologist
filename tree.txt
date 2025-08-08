@@ -1,0 +1,105 @@
+.
+├── AI_Psychologist
+│   ├── asgi.py
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   └── wsgi.py
+├── analysis
+│   ├── admin.py
+│   ├── apps.py
+│   ├── __init__.py
+│   ├── models.py
+│   ├── templates
+│   │   └── analysis
+│   │       ├── history.html
+│   │       └── upload.html
+│   ├── tests.py
+│   ├── urls.py
+│   └── views.py
+├── billing
+│   ├── admin.py
+│   ├── apps.py
+│   ├── __init__.py
+│   ├── models.py
+│   ├── templates
+│   │   └── billing
+│   │       ├── balance.html
+│   │       ├── change_password.html
+│   │       ├── edit_profile.html
+│   │       └── tariffs.html
+│   ├── tests.py
+│   ├── urls.py
+│   └── views.py
+├── chat
+│   ├── admin.py
+│   ├── apps.py
+│   ├── consumers.py
+│   ├── consumers_.py
+│   ├── consumers (копия).py
+│   ├── gpt_client.py
+│   ├── __init__.py
+│   ├── models.py
+│   ├── routing.py
+│   ├── templates
+│   │   └── chat
+│   │       ├── chat_history.html
+│   │       └── chat.html
+│   ├── tests.py
+│   ├── urls.py
+│   ├── utils.py
+│   └── views.py
+├── db.sqlite3
+├── manage.py
+├── media
+│   └── drawings
+│       ├── my_psy_pic (1)_dCI5RRz.jpeg
+│       ├── my_psy_pic (1).jpeg
+│       └── my_psy_pic (1)_Psdw65F.jpeg
+├── payments
+│   ├── admin.py
+│   ├── apps.py
+│   ├── __init__.py
+│   ├── models.py
+│   ├── tests.py
+│   └── views.py
+├── requirements.txt
+├── templates
+│   └── index.html
+├── users
+│   ├── admin.py
+│   ├── apps.py
+│   ├── forms.py
+│   ├── __init__.py
+│   ├── models.py
+│   ├── serializers.py
+│   ├── templates
+│   │   └── users
+│   │       ├── login.html
+│   │       ├── password_reset_confirm.html
+│   │       ├── password_reset_request.html
+│   │       ├── privacy_policy.html
+│   │       └── register.html
+│   ├── tests.py
+│   ├── urls.py
+│   ├── utils.py
+│   └── views.py
+└── user_sessions
+    ├── admin.py
+    ├── apps.py
+    ├── __init__.py
+    ├── models.py
+    ├── tests.py
+    └── views.py
+    
+for file in *.py; do
+  echo "=== $file ===" >> combined.txt
+  cat "$file" >> combined.txt
+  echo "" >> combined.txt
+done
+
+for file in *.html; do
+  echo "=== $file ===" >> combined.txt
+  cat "$file" >> combined.txt
+  echo "" >> combined.txt
+done

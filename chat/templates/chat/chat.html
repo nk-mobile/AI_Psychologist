@@ -1,0 +1,233 @@
+<!-- chat/templates/chat/chat.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Чат с ИИ-психологом</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #chat-box {
+            height: 400px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+        }
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .user-message {
+            background-color: #d1ecf1;
+            border-left: 3px solid #0dcaf0;
+        }
+        .assistant-message {
+            background-color: #d4edda;
+            border-left: 3px solid #28a745;
+        }
+        /* Стили для скрытия формы */
+        .chat-form-hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="container py-4">
+
+<h2>Чат с ИИ-психологом</h2>
+
+<!-- Форма для создания нового чата с темой -->
+<form id="new-chat-form" method="post" class="mb-3 {% if chat and not chat.c_closed %}chat-form-hidden{% endif %}">
+    {% csrf_token %}
+    <div class="input-group">
+        <input type="text" name="chat_title" class="form-control" placeholder="Введите тему чата" maxlength="255" value="{% if chat and chat.c_title and not chat.c_closed %}{{ chat.c_title }}{% endif %}">
+        <button type="submit" name="new_chat" class="btn btn-success">Новый чат</button>
+    </div>
+</form>
+
+<!-- Отображение текущей темы чата (если чат активен) -->
+{% if chat and not chat.c_closed and chat.c_title %}
+    <div class="alert alert-info">
+        <strong>Тема чата:</strong> {{ chat.c_title }}
+    </div>
+{% endif %}
+
+<!-- Окно чата -->
+<div id="chat-box" class="border {% if not chat or chat.c_closed %}chat-form-hidden{% endif %}"></div>
+
+<!-- Форма отправки сообщения (скрывается, если нет активного чата) -->
+<div id="message-form-container" class="input-group mb-3 {% if not chat or chat.c_closed %}chat-form-hidden{% endif %}">
+    <input id="message-input" type="text" class="form-control" placeholder="Напишите сообщение..." {% if not chat or chat.c_closed %}disabled{% endif %}>
+    <button id="send-btn" class="btn btn-primary" {% if not chat or chat.c_closed %}disabled{% endif %}>Отправить</button>
+</div>
+
+<div class="d-flex justify-content-between">
+    <!-- Форма завершения чата отображается только если чат существует и имеет ID -->
+    {% if chat and chat.c_id %}
+        <form id="close-chat-form" method="post" action="{% url 'close_chat_session' chat.c_id %}">
+            {% csrf_token %}
+            <button id="close-chat-btn" type="submit" class="btn btn-danger">Завершить чат</button>
+        </form>
+    {% endif %}
+    <!-- Конец формы завершения чата -->
+
+    <div>
+        <a href="{% url 'chat_history' %}" class="btn btn-info me-2">История чатов</a>
+        <a href="{% url 'home' %}" class="btn btn-secondary">На главную</a>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById("chat-box");
+    const input = document.getElementById("message-input");
+    const sendBtn = document.getElementById("send-btn");
+    const closeChatForm = document.getElementById("close-chat-form");
+    const closeChatBtn = document.getElementById("close-chat-btn");
+    const newChatForm = document.getElementById("new-chat-form");
+    const messageFormContainer = document.getElementById("message-form-container");
+
+    // Получаем CSRF токен из куки
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    let chatId = "{{ chat.c_id }}";
+    let socket = null;
+
+    // Функция для отображения одного сообщения в чат-боксе
+    function displayMessage(user, text) {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "chat-message";
+
+        if (user === "Психолог") {
+            msgDiv.classList.add("assistant-message");
+        } else {
+            msgDiv.classList.add("user-message");
+        }
+
+        // Форматируем текст (простая замена \n на <br>)
+        const formattedText = text.replace(/\n/g, '<br>');
+        msgDiv.innerHTML = `<strong>${user}:</strong><br>${formattedText}`;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // --- ДОБАВЛЕНО: Отображение истории сообщений при загрузке страницы ---
+    // Получаем сообщения из контекста Django и отображаем их
+    document.addEventListener('DOMContentLoaded', function() {
+        // Встроенная переменная JavaScript с сообщениями из Django
+        const djangoMessages = {{ messages_json|safe }}; // Мы добавим это в контекст
+
+        if (djangoMessages && Array.isArray(djangoMessages)) {
+            djangoMessages.forEach(msg => {
+                displayMessage(msg.user === 'assistant' ? 'Психолог' : 'Вы', msg.text);
+            });
+        }
+    });
+    // --- КОНЕЦ ДОБАВЛЕНИЯ ---
+
+    // Функция для подключения к WebSocket
+    function connectWebSocket(chatIdToConnect) {
+        if (chatIdToConnect && chatIdToConnect !== "None") {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${chatIdToConnect}/`);
+
+            socket.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+                // Отображаем входящее сообщение
+                displayMessage(data.user, data.message);
+            };
+
+            socket.onclose = function(e) {
+                console.log('WebSocket соединение закрыто:', e);
+            };
+
+            socket.onerror = function(error) {
+                console.error('Ошибка WebSocket:', error);
+            };
+        }
+    }
+
+    // Подключаемся при загрузке страницы, если есть активный чат
+    if (chatId && chatId !== "None") {
+        connectWebSocket(chatId);
+    }
+
+    sendBtn.onclick = function () {
+        if (!input.value.trim() || !socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(JSON.stringify({"message": input.value}));
+        // Отображаем сообщение пользователя сразу
+        displayMessage('Вы', input.value);
+        input.value = "";
+    };
+
+    // Обработка Enter для отправки сообщения
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendBtn.click();
+        }
+    });
+
+    // Обработчик формы завершения чата (AJAX)
+    if (closeChatForm) {
+        closeChatForm.onsubmit = function (e) {
+            e.preventDefault();
+
+            fetch(this.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrftoken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(new FormData(this))
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === "ok" || data.status === "already_closed") {
+                    if (socket) {
+                        socket.close();
+                    }
+                    input.disabled = true;
+                    sendBtn.disabled = true;
+                    messageFormContainer.classList.add('chat-form-hidden');
+                    chatBox.classList.add('chat-form-hidden');
+                    closeChatBtn.closest('form').classList.add('chat-form-hidden');
+                    newChatForm.classList.remove('chat-form-hidden');
+
+                    const titleInput = newChatForm.querySelector('input[name="chat_title"]');
+                    if(titleInput) {
+                        titleInput.value = "";
+                    }
+                } else {
+                    alert("Ошибка при завершении чата.");
+                }
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert("Ошибка сети при завершении чата.");
+            });
+        };
+    }
+</script>
+
+</body>
+</html>
